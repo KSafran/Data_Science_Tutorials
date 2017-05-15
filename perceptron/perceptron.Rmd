@@ -1,0 +1,134 @@
+---
+title: "Perceptron"
+author: "Kyle Safran"
+date: "May 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+```
+
+## Introduction
+
+The perceptron is a simple binary classification model, usually taught as an introduction to neural networks or SVMs. The model classifies data according to the simple linear decision boundary:  
+![image lazily copied from Wikipedia](https://wikimedia.org/api/rest_v1/media/math/render/svg/04228fc42b76b9ebcb067208e6129c3ccb735903)  
+
+## Algorithm
+We can use Rozenblatt's perceptron learning algorithm to find a separating hyperplane as long as the two classes are linearly separable. If y is labeled either -1 or 1, and M is the set of all misclassified points, we want to minimize the following
+
+$$-\sum_{i \in M} y_i(x_i^Tb+b_0)$$
+This is basically just minimizing the distance of the misclassified points to the decision boundary. We find this minimum by stochastic gradient descent, meaning that we update the parameters by using the gradient from one misclassified observation at a time. The gradient for each point is simply $$-y_ix_i$$, and our steps in this direction will be muted by a multiplicative learning rate p \in (0,1). For more details, see [ESL](http://statweb.stanford.edu/~tibs/ElemStatLearn/printings/ESLII_print10.pdf), page 130.
+
+## Implementation
+
+For this algorithm to converge, we need some data that is linearly separable. Let's use the iris data set - we can see below that the setosa and versicolor species are both linearly separable by Sepal Length and Sepal Width.
+
+```{r test separability}
+ggplot(iris %>% filter(Species != 'virginica')) + 
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width, col = Species))
+```
+
+First, we need to set up our data for use in the algorithm. It's not so important in this particular case, but we want to scale our data before implementing this algorithm. We also want our model matrix to include and intercept column. 
+
+```{r data matrix}
+iris.perceptron <- iris %>% 
+  filter(Species != 'virginica') %>% 
+  mutate(Sepal.Length = scale(Sepal.Length),
+         Sepal.Width = scale(Sepal.Width),
+         label = ifelse(Species == 'setosa', 1, -1))
+iris.matrix <- model.matrix(label ~ Sepal.Length + Sepal.Width, 
+                            data = iris.perceptron)
+head(iris.matrix)
+```
+Next, let's implement a perceptron function. This should take in the data matrix and a vector of parameters, and return a classification of either 1 or -1.
+
+```{r perceptron}
+perceptron <- function(data, betas){
+  sign(data %*% betas)
+}
+```
+  
+## Initialization
+
+First, we will initialize our boundary with some random parameter values, and plot our boundary.
+
+```{r initialize, echo=FALSE}
+set.seed(0)
+beta.init <- runif(3)
+ggplot(iris.perceptron) + 
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width, col = Species)) +
+# Our line is defined by t(B)*x = 0, so x2 = -b0/b2 - b1/b2x1 
+  geom_abline(intercept = -(beta.init[1]/beta.init[3]),
+              slope = -(beta.init[2]/beta.init[3]))
+```
+
+Well this is a pretty bad starting point, so let's start running through our misclassified points and updating our boundary. Let's pick a misclassified point to update
+
+```{r misclassified point}
+iris.perceptron$prediction = perceptron(iris.matrix, beta.init)
+missed <- iris.perceptron[iris.perceptron$prediction != iris.perceptron$label,]
+
+ggplot() + 
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width), col = 'black', size = 3,
+             data = missed[1,]) +
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width, col = Species),
+             data = iris.perceptron) +
+# Our line is defined by t(B)*x = 0, so x2 = -b0/b2 - b1/b2x1 
+  geom_abline(intercept = -(beta.init[1]/beta.init[3]),
+              slope = -(beta.init[2]/beta.init[3]),
+              data = iris.perceptron) 
+
+```
+Now we want to update our betas by taking a step in the direction of the gradient for this point. 
+
+```{r update 1}
+p <- 0.7
+beta.update = beta.init + p * missed[1, 'label'] * c(1, missed$Sepal.Length[1], 
+                                                     missed$Sepal.Width[1])
+ggplot() + 
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width), col = 'black', size = 3,
+             data = missed[1,]) +
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width, col = Species),
+             data = iris.perceptron) +
+# Our line is defined by t(B)*x = 0, so x2 = -b0/b2 - b1/b2x1 
+  geom_abline(intercept = -(beta.update[1]/beta.update[3]),
+              slope = -(beta.update[2]/beta.update[3]),
+              data = iris.perceptron)
+
+```
+  
+So it looks like this boundary got worse, but it's actually flipping which side of the line represents setosa. The weights for length and width both went from positive to negative.  
+The algorithm is run by iterating through all the points in our training set one by one. If the point is misclassified (by our most up-to-date weight estimates), then we update the weights using information from that one point. If the point is currently being classified corrrectly, we don't do anything. If that's not totally clear, the following code runs through the process.
+
+```{r keep updating}
+p <- 0.7
+# Let's save the output of beta.update in a matrix
+beta.update <- t(replicate(nrow(iris.matrix) + 1, beta.init))
+for(i in 1:nrow(iris.matrix)){
+  # First, evaluate the algorithm with current weights.
+  iris.perceptron$prediction <- perceptron(iris.matrix, beta.update[i, ])
+  if(i %% 10 == 0){
+    print(paste('Error = ',sum(iris.perceptron$prediction != iris.perceptron$label)))
+  }
+  # If the current observation is misclassified, update our betas
+  if(iris.perceptron$prediction[i] != iris.perceptron$label[i]){
+    beta.update[i + 1, ] <-  beta.update[i, ] + (p * iris.perceptron$label[i] * c(1,        iris.perceptron$Sepal.Length[i], iris.perceptron$Sepal.Width[i]))
+  } else {
+    beta.update[i + 1, ] <- beta.update[i, ]
+  }
+}
+
+```
+Great, we saw the error decrease dramatically. We should really keep iterating through the data until we fix the last point that is off, but let's pause here and see what we have.
+```{r final line}
+ggplot() + 
+  geom_point(aes(x = Sepal.Length, y = Sepal.Width, col = Species),
+             data = iris.perceptron) +
+# Our line is defined by t(B)*x = 0, so x2 = -b0/b2 - b1/b2x1 
+  geom_abline(intercept = -(beta.update[101, 1]/beta.update[101, 3]),
+              slope = -(beta.update[101,2]/beta.update[101, 3]),
+              data = iris.perceptron)
+```
