@@ -1,0 +1,43 @@
+---
+title: "Hierarchical"
+author: "Kyle Safran"
+date: "June 4, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+```
+
+## Hierarchical Clustering
+
+Hierarchical clustering is a common unsupervised learning technique, commonly used on smaller datasets. It can help uncover structure in the data even when you don't have a prior idea of how many natural groupings exist in the data. It requires pairwise distances to be evaluated, so it is very computationally expensive. In this example we will use the iris dataset to cluster flowers into species using Petal Width and Petal Length.
+
+```{r faithful graph}
+data(iris)
+ggplot() + 
+  geom_point(aes(x = Petal.Length, y = Petal.Width), 
+             data = iris) +
+  theme_bw()
+```
+  
+## Algorithm
+Just like K Means, this clustering method relies on distance measurements, so we will start by scaling and centering the data. Once the data is scaled, we compute the full pairwise distance matrix. The model starts with each observation in its own cluster, and agglomerates these points into clusters one by one. Below, I show the first step, where the two closest points are joined together into the first cluster.
+
+## First Step
+In our case we have duplicates - some flowers have the same petal lengths and widths. We will start by grouping these values together into custers. 
+```{r First Step}
+scaled.petals <- iris %>% 
+  select(starts_with('Petal')) %>% 
+  scale()
+petal.distances <- dist(scaled.petals) %>% 
+  as.matrix()
+ggplot() + 
+  geom_point(aes(x = Petal.Length, y = Petal.Width), 
+             data = iris) +
+  theme_bw()
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

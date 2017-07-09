@@ -1,0 +1,59 @@
+---
+title: "Basic Neural Net"
+author: "Kyle Safran"
+date: "June 4, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Neural Networks
+Neural networks are machine learning models based loosely on the brain's neurons. In these networks predictors are fed into multiple nodes, transformed by an activation function, and finally converted into a prediction through a final output layer. In this example we will build a very simple neural network to predict whether an iris is a setosa using the dimensions of its petals.
+
+```{r iris}
+data(iris)
+iris$is.setosa <- iris$Species == 'setosa'
+ggplot() + 
+  geom_point(aes(x = Petal.Width, y = Petal.Length, col = is.setosa),
+             data = iris) + 
+  theme_bw()
+```
+
+## Designing the Network
+The universal approximation theorem states that we can uncover any continuous function using a single layer neural network. That doesn't necessarily mean that is the best way to set things up, but with this easily separable data, one layer will be fine. The standard activation function is the relu. For the output layer we will just use the logistic function for binary classification.
+```{r functions}
+relu <- function(x){
+  ifelse(x >= 0, x, 0)
+}
+logistic <- function(x){
+  1 / (1 + exp(-x))
+}
+```
+
+We can start by using a 3 node layer that ouputs to the logistic function. To evaluate the predictons we use the logloss function.
+```{r network}
+node <- function(data, weights){
+  relu(data %*% weights)
+}
+hidden <- function(data, weights.list, n.nodes){
+  output <- c()
+  for(i in 1:n.nodes){
+    output <- c(output, node(data, weights.list[[i]]))
+  }
+  output
+}
+output_layer <- function(input, weights){
+  logistic(input %*% weights)
+}
+evaluation <- function(prediction, actual, eps = 1e-15){
+  prediction = pmin(pmax(prediction, eps), 1 - eps)
+  -mean(actual * log(prediction) + (1 - actual) * log(1 - prediction))
+}
+derivative <- function(prediction, actual){
+  
+  
+}
+```
+
